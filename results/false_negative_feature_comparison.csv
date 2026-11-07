@@ -1,0 +1,11 @@
+Feature,Detected mean,Missed mean,Detected median,Missed median
+https,0.0438,0.4225,0.0,0.0
+url_length,38.1428,26.4085,33.0,23.0
+hostname_length,14.7289,13.6056,14.0,13.0
+path_length,11.9808,4.0563,7.0,2.0
+digit_count,13.7108,0.4085,15.0,0.0
+hyphen_count,0.0731,0.0563,0.0,0.0
+dot_count,3.5311,1.5775,4.0,1.0
+special_char_count,0.2457,0.1549,0.0,0.0
+query_length,0.3423,0.9296,0.0,0.0
+phishing_score,0.9217,0.3437,0.9256,0.3699
