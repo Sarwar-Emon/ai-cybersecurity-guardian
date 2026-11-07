@@ -16,7 +16,7 @@ EMAIL_RULES = [
         10,
     ),
     (
-        r"\b(account suspended|account will be suspended|"
+        r"\b(account suspended|account has been suspended|account will be suspended|"
         r"account locked|account will be locked|"
         r"account terminated)\b",
         "Account suspension or lockout threat detected.",
