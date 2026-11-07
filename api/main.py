@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from src.url_validator import validate_url
 from src.url_detector import analyze_url
 from src.ml_detector import predict_url
+from src.email_detector import analyze_email
 
 
 app = FastAPI(
@@ -143,5 +144,36 @@ def analyze_url_endpoint(request: URLRequest):
         "disclaimer": (
             "ML score is not a calibrated real-world phishing probability. "
             "A URL that is not flagged is not necessarily safe."
+        ),
+    }
+
+
+class EmailRequest(BaseModel):
+    email_text: str = Field(min_length=1, max_length=50000)
+
+
+@app.post(
+    "/api/v1/analyze/email",
+    dependencies=[
+        Depends(require_api_key),
+        Depends(enforce_rate_limit),
+    ],
+)
+def analyze_email_endpoint(request: EmailRequest):
+    if not request.email_text.strip():
+        raise HTTPException(
+            status_code=422,
+            detail="Email text cannot be empty.",
+        )
+
+    result = analyze_email(request.email_text)
+
+    return {
+        "status": "analyzed",
+        **result,
+        "disclaimer": (
+            "Email risk score is heuristic, not a calibrated "
+            "phishing probability. A low score does not "
+            "guarantee that an email is safe."
         ),
     }
