@@ -45,7 +45,7 @@ describe('Analysis mode isolation', () => {
       )
     })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Email Analysis' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Email Analyzer' }))
 
     expect(screen.queryByText('ML Analysis')).toBeNull()
     expect(screen.queryByText('Security Findings')).toBeNull()

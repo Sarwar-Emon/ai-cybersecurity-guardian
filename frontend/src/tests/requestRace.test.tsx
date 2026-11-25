@@ -33,7 +33,7 @@ describe('Asynchronous request isolation', () => {
       expect(mockFetch).toHaveBeenCalledTimes(1)
     })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Email Analysis' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Email Analyzer' }))
 
     await act(async () => {
       resolveRequest({

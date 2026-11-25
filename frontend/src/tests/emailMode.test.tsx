@@ -17,7 +17,7 @@ describe('Guardian AI email analysis mode', () => {
     ).toBeTruthy()
 
     fireEvent.click(
-      screen.getByRole('button', { name: 'Email Analysis' })
+      screen.getByRole('button', { name: 'Email Analyzer' })
     )
 
     expect(

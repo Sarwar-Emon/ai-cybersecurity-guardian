@@ -192,14 +192,27 @@ function App() {
               <Activity size={18} />
               Dashboard
             </div>
-            <div className="flex items-center gap-3 px-4 py-3 text-sm text-slate-600">
-              <Search size={18} />
-              {mode === 'url' ? 'URL Analyzer' : 'Email Analyzer'}
-            </div>
-            <div className="flex items-center gap-3 px-4 py-3 text-sm text-slate-600">
-              <Shield size={18} />
-              Threat Intelligence
-            </div>
+            {(['url', 'email'] as const).map((item) => (
+              <button
+                key={item}
+                type="button"
+                aria-pressed={mode === item}
+                onClick={() => {
+                  requestIdRef.current++
+                  setMode(item)
+                  setMessage('')
+                  setLoading(false)
+                }}
+                className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm ${
+                  mode === item
+                    ? 'bg-sky-50 font-medium text-sky-700'
+                    : 'text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                <Search size={18} />
+                {item === 'url' ? 'URL Analyzer' : 'Email Analyzer'}
+              </button>
+            ))}
           </nav>
 
           <div className="mt-12 rounded-xl border border-slate-200 bg-slate-50 p-4">
@@ -255,25 +268,6 @@ function App() {
                   {mode === 'url' ? 'Enter a URL to run machine learning and rule-based analysis.' : 'Enter email content for heuristic phishing-risk analysis.'}
                 </p>
               </div>
-            </div>
-
-            <div className="mt-7 flex gap-3">
-              <button
-                type="button"
-                aria-pressed={mode === 'url'}
-                onClick={() => { requestIdRef.current++; setMode('url'); setMessage(''); setLoading(false) }}
-                className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-medium"
-              >
-                URL Analysis
-              </button>
-              <button
-                type="button"
-                aria-pressed={mode === 'email'}
-                onClick={() => { requestIdRef.current++; setMode('email'); setMessage(''); setLoading(false) }}
-                className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-medium"
-              >
-                Email Analysis
-              </button>
             </div>
 
             {mode === 'url' ? (

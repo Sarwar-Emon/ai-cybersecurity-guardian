@@ -22,7 +22,7 @@ describe('Mode-specific dashboard information', () => {
   it('shows the correct detection methodology for Email mode', () => {
     render(<App />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Email Analysis' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Email Analyzer' }))
 
     expect(screen.getByText('Heuristic Rules')).toBeTruthy()
     expect(screen.getByText('Content + Sender')).toBeTruthy()

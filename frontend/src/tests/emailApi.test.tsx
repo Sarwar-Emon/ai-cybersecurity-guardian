@@ -35,7 +35,7 @@ describe('Guardian AI email API integration', () => {
     render(<App />)
 
     fireEvent.click(
-      screen.getByRole('button', { name: 'Email Analysis' })
+      screen.getByRole('button', { name: 'Email Analyzer' })
     )
 
     const emailText = [
