@@ -47,3 +47,6 @@ data/
 # Local backup files
 *.before-*
 *.backup.txt
+
+# Additional local backup files
+*.save

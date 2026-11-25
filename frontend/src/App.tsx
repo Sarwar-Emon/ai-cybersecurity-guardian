@@ -1,5 +1,5 @@
 import { validateUrl } from './urlValidation'
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import {
   Activity,
   ArrowRight,
@@ -25,12 +25,45 @@ type AnalysisResult = {
   disclaimer: string
 }
 
+type EmailAnalysisResult = {
+  status: string
+  score: number
+  level: string
+  findings: string[]
+  content_score: number
+  sender_score: number
+  urls: string[]
+  sender_analysis: {
+    sender: string
+    domain: string
+    registered_domain: string
+    findings: string[]
+    score: number
+  } | null
+  embedded_url_analysis: {
+    url: string
+    status: string
+    findings: string[]
+    ml_analysis?: {
+      classification: 'flagged' | 'not_flagged'
+      phishing_class_score: number
+      threshold: number
+      model: string
+    }
+  }[]
+  disclaimer: string
+}
+
 function App() {
+  const [mode, setMode] = useState<'url' | 'email'>('url')
+  const [emailText, setEmailText] = useState('')
+  const [emailResult, setEmailResult] = useState<EmailAnalysisResult | null>(null)
   const [url, setUrl] = useState('')
   const [result, setResult] = useState<AnalysisResult | null>(null)
   const [message, setMessage] = useState('')
 
   const [loading, setLoading] = useState(false)
+  const requestIdRef = useRef(0)
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -42,6 +75,7 @@ function App() {
       return
     }
 
+    const requestId = ++requestIdRef.current
     setLoading(true)
     setResult(null)
     setMessage('Analyzing URL...')
@@ -71,6 +105,7 @@ function App() {
       }
 
       const result: AnalysisResult = await response.json()
+      if (requestId !== requestIdRef.current) return
       setResult(result)
       setMessage(
         result.ml_analysis.classification === 'flagged'
@@ -78,9 +113,63 @@ function App() {
           : 'Analysis complete: Not flagged by the model. This does not guarantee safety.'
       )
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Analysis failed.')
+      if (requestId === requestIdRef.current) {
+        setMessage(error instanceof Error ? error.message : 'Analysis failed.')
+      }
     } finally {
-      setLoading(false)
+      if (requestId === requestIdRef.current) setLoading(false)
+    }
+  }
+
+  async function handleEmailSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    const text = emailText.trim()
+
+    if (!text) {
+      setMessage('Please enter email content to analyze.')
+      return
+    }
+
+    const requestId = ++requestIdRef.current
+    setLoading(true)
+    setResult(null)
+    setEmailResult(null)
+    setMessage('Analyzing email...')
+
+    try {
+      const response = await fetch('/api/v1/analyze/email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email_text: text }),
+      })
+
+      if (!response.ok) {
+        const errorBody: unknown = await response.json().catch(() => null)
+        let detail = `Email analysis failed (HTTP ${response.status}).`
+
+        if (
+          typeof errorBody === 'object' &&
+          errorBody !== null &&
+          'detail' in errorBody &&
+          typeof errorBody.detail === 'string'
+        ) {
+          detail = errorBody.detail
+        }
+
+        throw new Error(detail)
+      }
+
+      const data: EmailAnalysisResult = await response.json()
+      if (requestId !== requestIdRef.current) return
+      setEmailResult(data)
+      setMessage('Email analysis complete.')
+    } catch (error) {
+      if (requestId === requestIdRef.current) {
+        setMessage(error instanceof Error ? error.message : 'Email analysis failed.')
+      }
+    } finally {
+      if (requestId === requestIdRef.current) setLoading(false)
     }
   }
 
@@ -105,7 +194,7 @@ function App() {
             </div>
             <div className="flex items-center gap-3 px-4 py-3 text-sm text-slate-600">
               <Search size={18} />
-              URL Analyzer
+              {mode === 'url' ? 'URL Analyzer' : 'Email Analyzer'}
             </div>
             <div className="flex items-center gap-3 px-4 py-3 text-sm text-slate-600">
               <Shield size={18} />
@@ -116,7 +205,7 @@ function App() {
           <div className="mt-12 rounded-xl border border-slate-200 bg-slate-50 p-4">
             <p className="text-sm font-medium">Research-driven detection</p>
             <p className="mt-2 text-xs leading-5 text-slate-600">
-              Machine learning and rule-based URL analysis.
+              {mode === 'url' ? 'Machine learning and rule-based URL analysis.' : 'Heuristic email content and sender analysis.'}
             </p>
           </div>
         </aside>
@@ -129,7 +218,7 @@ function App() {
                 Threat Detection Dashboard
               </h2>
               <p className="mt-2 text-sm text-slate-600">
-                Analyze suspicious URLs with our machine learning engine.
+                {mode === 'url' ? 'Analyze suspicious URLs with our machine learning engine.' : 'Analyze suspicious emails using heuristic detection rules.'}
               </p>
             </div>
             <span className="flex items-center gap-2 rounded-full border border-slate-200 px-4 py-2 text-xs text-slate-700">
@@ -140,9 +229,9 @@ function App() {
 
           <section className="mt-10 grid gap-4 md:grid-cols-3">
             {[
-              { label: 'Detection Engine', value: 'Random Forest', icon: ShieldCheck },
-              { label: 'Analysis Methods', value: 'ML + Rules', icon: Activity },
-              { label: 'Current Session', value: result ? 'Scan completed' : 'No scans yet', icon: Globe },
+              { label: 'Detection Engine', value: mode === 'url' ? 'Random Forest' : 'Heuristic Rules', icon: ShieldCheck },
+              { label: 'Analysis Methods', value: mode === 'url' ? 'ML + Rules' : 'Content + Sender', icon: Activity },
+              { label: 'Current Session', value: (mode === 'url' ? result : emailResult) ? 'Scan completed' : 'No scans yet', icon: Globe },
             ].map((item) => {
               const Icon = item.icon
               return (
@@ -161,13 +250,33 @@ function App() {
                 <Search size={22} />
               </div>
               <div>
-                <h3 className="text-xl font-semibold">URL Threat Scanner</h3>
+                <h3 className="text-xl font-semibold">{mode === 'url' ? 'URL Threat Scanner' : 'Email Threat Scanner'}</h3>
                 <p className="mt-1 text-sm text-slate-600">
-                  Enter a URL to run machine learning and rule-based analysis.
+                  {mode === 'url' ? 'Enter a URL to run machine learning and rule-based analysis.' : 'Enter email content for heuristic phishing-risk analysis.'}
                 </p>
               </div>
             </div>
 
+            <div className="mt-7 flex gap-3">
+              <button
+                type="button"
+                aria-pressed={mode === 'url'}
+                onClick={() => { requestIdRef.current++; setMode('url'); setMessage(''); setLoading(false) }}
+                className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-medium"
+              >
+                URL Analysis
+              </button>
+              <button
+                type="button"
+                aria-pressed={mode === 'email'}
+                onClick={() => { requestIdRef.current++; setMode('email'); setMessage(''); setLoading(false) }}
+                className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-medium"
+              >
+                Email Analysis
+              </button>
+            </div>
+
+            {mode === 'url' ? (
             <form onSubmit={handleSubmit} className="mt-7 flex flex-col gap-3 sm:flex-row">
               <label htmlFor="url-input" className="sr-only">URL to analyze</label>
               <input
@@ -187,7 +296,126 @@ function App() {
                 {loading ? 'Analyzing...' : 'Analyze URL'} <ArrowRight size={18} />
               </button>
             </form>
+            ) : (
+              <form onSubmit={handleEmailSubmit} className="mt-7 flex flex-col gap-3">
+                <label htmlFor="email-input" className="sr-only">
+                  Email text to analyze
+                </label>
+                <textarea
+                  id="email-input"
+                  value={emailText}
+                  onChange={(event) => setEmailText(event.target.value)}
+                  maxLength={50000}
+                  rows={7}
+                  placeholder="Paste suspicious email content here..."
+                  className="w-full rounded-xl border border-slate-200 p-4 text-sm"
+                />
+                <button
+                  type="submit"
+                  className="rounded-xl bg-sky-600 px-6 py-4 font-semibold text-white"
+                >
+                  Analyze Email
+                </button>
+              </form>
+            )}
 
+
+            {mode === 'email' && emailResult && (
+  <div className="mt-5 space-y-5">
+
+    <div className="rounded-xl border border-amber-200 bg-amber-50 p-5">
+      <p className="text-sm text-slate-600">Email Risk Assessment</p>
+      <p className="mt-2 text-2xl font-bold">{emailResult.level}</p>
+      <p className="mt-2 text-sm">
+        Heuristic Risk Score: {emailResult.score}/100
+      </p>
+    </div>
+
+    <div className="rounded-xl border border-slate-200 bg-white p-5">
+      <h3 className="font-semibold">Detection Breakdown</h3>
+      <div className="mt-4 grid grid-cols-2 gap-4">
+        <div className="rounded-lg bg-slate-50 p-4">
+          <p className="text-sm text-slate-500">Content Score</p>
+          <p className="mt-2 text-2xl font-bold">{emailResult.content_score ?? 0}</p>
+        </div>
+        <div className="rounded-lg bg-slate-50 p-4">
+          <p className="text-sm text-slate-500">Sender Score</p>
+          <p className="mt-2 text-2xl font-bold">{emailResult.sender_score ?? 0}</p>
+        </div>
+      </div>
+    </div>
+
+    <div className="rounded-xl border border-slate-200 bg-white p-5">
+      <h3 className="font-semibold">Security Findings</h3>
+      <ul className="mt-4 space-y-3">
+        {emailResult.findings.map((finding, index) => (
+          <li key={`${index}-${finding}`} className="text-sm">
+            • {finding}
+          </li>
+        ))}
+      </ul>
+    </div>
+
+    <div className="rounded-xl border border-slate-200 bg-white p-5">
+      <h3 className="font-semibold">Sender Analysis</h3>
+      {emailResult.sender_analysis ? (
+        <>
+          <div className="mt-4 space-y-2 text-sm">
+            <p>Sender: {emailResult.sender_analysis.sender || 'Not provided'}</p>
+            <p>Domain: {emailResult.sender_analysis.domain || 'Not identified'}</p>
+            <p>Registered Domain: {emailResult.sender_analysis.registered_domain || 'Not identified'}</p>
+          </div>
+          <ul className="mt-4 space-y-2">
+            {emailResult.sender_analysis.findings.map((finding, index) => (
+              <li key={index} className="text-sm">• {finding}</li>
+            ))}
+          </ul>
+        </>
+      ) : (
+        <p className="mt-3 text-sm text-slate-500">Sender information unavailable.</p>
+      )}
+    </div>
+
+    <div className="rounded-xl border border-slate-200 bg-white p-5">
+      <h3 className="font-semibold">Embedded URL Analysis</h3>
+      {(emailResult.embedded_url_analysis ?? []).length > 0 ? (
+        (emailResult.embedded_url_analysis ?? []).map((item, index) => (
+          <div key={`${item.url}-${index}`} className="mt-4 rounded-lg border border-slate-200 p-4">
+            <p className="break-all text-sm font-medium">{item.url}</p>
+            <p className="mt-3 text-sm">Status: {item.status}</p>
+
+            <ul className="mt-3 space-y-2">
+              {item.findings.map((finding, i) => (
+                <li key={i} className="text-sm">• {finding}</li>
+              ))}
+            </ul>
+
+            {item.ml_analysis && (
+              <div className="mt-4 rounded-lg bg-slate-50 p-4">
+                <h4 className="font-semibold text-sm">Machine Learning Results</h4>
+                <p className="mt-3 text-sm">Classification: {item.ml_analysis.classification}</p>
+                <p className="mt-2 text-sm">Model: {item.ml_analysis.model}</p>
+                <p className="mt-2 text-sm">
+                  Phishing Class Score: {(item.ml_analysis.phishing_class_score * 100).toFixed(2)}%
+                </p>
+                <p className="mt-2 text-sm">
+                  Threshold: {(item.ml_analysis.threshold * 100).toFixed(0)}%
+                </p>
+                <p className="mt-3 text-xs text-slate-500">
+                  Model score is not a calibrated real-world phishing probability.
+                </p>
+              </div>
+            )}
+          </div>
+        ))
+      ) : (
+        <p className="mt-3 text-sm text-slate-500">No embedded URLs detected.</p>
+      )}
+    </div>
+
+    <p className="text-xs text-slate-500">{emailResult.disclaimer}</p>
+  </div>
+)}
             {message && (
               <p role="status" className="mt-4 text-sm text-amber-700">
                 {message}
@@ -200,6 +428,7 @@ function App() {
             </p>
           </section>
 
+          {mode === 'url' && (
           <section className="mt-8 grid gap-5 md:grid-cols-2">
             <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6">
               <div className="flex items-center gap-2 text-slate-700">
@@ -317,9 +546,12 @@ function App() {
             </div>
           </section>
 
+          )}
+
           <p className="mt-8 text-xs leading-5 text-slate-500">
-            Detection results are advisory. ML scores are not calibrated real-world
-            phishing probabilities. A URL not flagged by the model is not necessarily safe.
+            {mode === 'url'
+              ? 'Detection results are advisory. ML scores are not calibrated real-world phishing probabilities. A URL not flagged by the model is not necessarily safe.'
+              : 'Email risk scores are heuristic, not calibrated phishing probabilities. A low risk score does not guarantee that an email is safe.'}
           </p>
         </main>
       </div>

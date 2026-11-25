@@ -212,9 +212,15 @@ def analyze_sender(email_text):
         or any(
             not label
             or len(label) > 63
-            or not re.fullmatch(
-                r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?",
-                label,
+            or not (
+                label[0].isascii()
+                and label[0].isalnum()
+                and label[-1].isascii()
+                and label[-1].isalnum()
+                and all(
+                    char.isascii() and (char.isalnum() or char == '-')
+                    for char in label
+                )
             )
             for label in labels
         )
@@ -292,35 +298,29 @@ def analyze_sender(email_text):
 
             score += 30
 
-        # RULE: Brand + security-related keyword
-        #
-        # Examples:
-        # paypal-support.com
-        # google-security.com
-        # amazon-verification.com
-        #
-        # Inspect only the registered-domain label,
-        # not arbitrary subdomains.
-
-        domain_parts = domain_label.split("-")
+        # RULE: Brand + security-related keyword.
+        # Inspect all hostname labels, including subdomains.
+        hostname_parts = [
+            part
+            for label in domain.split(".")
+            for part in label.split("-")
+        ]
 
         brand_keyword_match = (
-            brand in domain_parts
+            brand in hostname_parts
             and any(
-                keyword in domain_parts
+                keyword in hostname_parts
                 for keyword in SECURITY_KEYWORDS
             )
         )
 
         if brand_keyword_match:
-
             findings.append(
-                f"Sender domain combines the brand "
+                f"Sender hostname combines the brand "
                 f"'{brand}' with a security-related "
-                "keyword in its registered domain."
+                "keyword."
             )
-
-            score += 15
+            score += 20
 
 
         # RULE 2:

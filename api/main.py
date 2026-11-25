@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from src.url_validator import validate_url
 from src.url_detector import analyze_url
 from src.ml_detector import predict_url
-from src.email_detector import analyze_email
+from src.email_detector import analyze_email, extract_email_urls
 
 
 app = FastAPI(
@@ -168,9 +168,59 @@ def analyze_email_endpoint(request: EmailRequest):
 
     result = analyze_email(request.email_text)
 
+    # Analyze URLs embedded in the email independently.
+    embedded_url_analysis = []
+
+    for embedded_url in extract_email_urls(request.email_text):
+        validation = validate_url(embedded_url)
+
+        if not validation["valid"]:
+            embedded_url_analysis.append({
+                "url": embedded_url,
+                "status": "invalid",
+                "findings": [validation["message"]],
+                "ml_analysis": None,
+            })
+            continue
+
+        normalized_url = validation["url"]
+        url_findings = analyze_url(normalized_url)
+
+        try:
+            ml_result = predict_url(normalized_url)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception(
+                "Embedded URL ML inference failed"
+            )
+            embedded_url_analysis.append({
+                "url": embedded_url,
+                "status": "unavailable",
+                "findings": url_findings,
+                "ml_analysis": None,
+            })
+            continue
+
+        embedded_url_analysis.append({
+            "url": embedded_url,
+            "status": "analyzed",
+            "findings": url_findings,
+            "ml_analysis": {
+                "classification": (
+                    "flagged"
+                    if ml_result["phishing_score"] >= ml_result["threshold"]
+                    else "not_flagged"
+                ),
+                "phishing_class_score": ml_result["phishing_score"],
+                "threshold": ml_result["threshold"],
+                "model": ml_result["model"],
+            },
+        })
+
     return {
         "status": "analyzed",
         **result,
+        "embedded_url_analysis": embedded_url_analysis,
         "disclaimer": (
             "Email risk score is heuristic, not a calibrated "
             "phishing probability. A low score does not "

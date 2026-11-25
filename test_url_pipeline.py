@@ -17,7 +17,7 @@ TEST_URLS = [
 ]
 
 
-def test_url(url):
+def inspect_url(url):
     print("\n" + "=" * 65)
     print("INPUT:", url)
 
@@ -72,6 +72,6 @@ if __name__ == "__main__":
     print("AI CYBERSECURITY GUARDIAN — URL PIPELINE TEST")
 
     for url in TEST_URLS:
-        test_url(url)
+        inspect_url(url)
 
     print("\nTEST EXECUTION COMPLETED")

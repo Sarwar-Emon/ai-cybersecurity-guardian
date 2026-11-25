@@ -49,3 +49,46 @@ def test_empty_email_rejected():
         json={"email_text": ""},
     )
     assert response.status_code == 422
+
+def test_email_analyzes_embedded_url_separately(monkeypatch):
+    """Email and embedded URL analyses remain separate."""
+
+    url = "http" + chr(58) + chr(47) * 2 + "paypal-login.example.com/verify-account"
+
+    def fake_predict_url(received_url):
+        assert received_url == url
+        return {
+            "phishing_score": 0.91,
+            "threshold": 0.5,
+            "model": "test-random-forest",
+        }
+
+    monkeypatch.setattr("api.main.predict_url", fake_predict_url)
+
+    response = client.post(
+        "/api/v1/analyze/email",
+        headers={"X-API-Key": "test-email-api-key"},
+        json={
+            "email_text": (
+                "URGENT: Your account has been suspended. "
+                "Verify your identity at " + url
+            )
+        },
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+    assert data["score"] == 60
+    assert data["level"] == "High Risk"
+
+    embedded = data["embedded_url_analysis"]
+    assert len(embedded) == 1
+
+    item = embedded[0]
+    assert item["url"] == url
+    assert item["status"] == "analyzed"
+    assert isinstance(item["findings"], list)
+    assert item["ml_analysis"]["classification"] == "flagged"
+    assert item["ml_analysis"]["phishing_class_score"] == 0.91
+    assert item["ml_analysis"]["threshold"] == 0.5

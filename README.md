@@ -133,6 +133,20 @@ The API currently uses an in-memory rate limit of 10 requests per 60 seconds per
 
 Interactive FastAPI documentation and the OpenAPI endpoint are disabled in this implementation.
 
+## Email Phishing Analysis
+
+The application analyzes email content, suspicious sender domains, brand impersonation, and embedded URLs.
+
+### Email API
+
+Endpoint: `POST /api/v1/analyze/email`
+
+Request body: `email_text` (maximum 50,000 characters).
+
+The endpoint requires an API key and returns email risk findings, sender analysis, and independent analysis of embedded URLs using URL rules and machine learning.
+
+Email risk scores are heuristic, not calibrated phishing probabilities. SPF, DKIM, and DMARC authentication are not independently verified.
+
 ## Machine-Learning Model
 
 The deployed model is stored at:
