@@ -210,3 +210,19 @@ Performance figures should be interpreted in the context of the specific evaluat
 ## Disclaimer
 
 AI Cybersecurity Guardian is a research and educational prototype. Its output should be treated as a risk indicator, not a definitive determination that a URL is safe or malicious.
+
+## Live demo on Render (free)
+
+The repo includes `Dockerfile.render` and `render.yaml`, which run the whole app as one container. No API keys or paid services are needed.
+
+1. Push the repo to GitHub.
+2. On render.com, choose **New → Blueprint**, pick this repo, and apply.
+3. When the build finishes, Render gives you a URL like `https://ai-cybersecurity-guardian.onrender.com`.
+
+Demo mode (`DEMO_MODE=true`) is only for the hosted copy. Visitors do not need an API key. Instead:
+
+- Each visitor is limited to 10 requests per minute (by address).
+- All visitors share a daily cap (`DEMO_DAILY_REQUESTS`, default 500).
+- A banner asks visitors not to paste real or private emails.
+
+Without `DEMO_MODE`, the API keeps full API-key authentication, as in the local Docker Compose setup. On the free plan the app sleeps when idle, so the first visit can take about a minute.

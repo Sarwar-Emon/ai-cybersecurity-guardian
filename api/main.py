@@ -8,7 +8,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from fastapi import FastAPI, HTTPException, Header, Depends
+from datetime import date, datetime, timezone
+
+from fastapi import FastAPI, HTTPException, Header, Depends, Request
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from src.url_validator import validate_url
@@ -26,11 +29,46 @@ app = FastAPI(
 )
 
 
+# Public demo mode (for a hosted copy). Visitors do not need an API key, so the
+# limits below protect the server: a per-visitor rate limit and a shared daily cap.
+# Off by default, so local Docker use keeps full API-key authentication.
+def demo_mode() -> bool:
+    return os.environ.get("DEMO_MODE", "").lower() in {"1", "true", "yes"}
+
+
+DEMO_DAILY_LIMIT = int(os.environ.get("DEMO_DAILY_REQUESTS", "500"))
+_demo_day = datetime.now(timezone.utc).date()
+_demo_used = 0
+_demo_lock = Lock()
+
+
+def spend_demo_budget() -> bool:
+    """Count one request against today's shared budget (resets at midnight UTC)."""
+    global _demo_day, _demo_used
+    with _demo_lock:
+        today = datetime.now(timezone.utc).date()
+        if today != _demo_day:
+            _demo_day, _demo_used = today, 0
+        if _demo_used >= DEMO_DAILY_LIMIT:
+            return False
+        _demo_used += 1
+        return True
+
+
+def visitor_id(request: Request) -> str:
+    """Behind Render's proxy the real address is the first X-Forwarded-For entry."""
+    forwarded = request.headers.get("x-forwarded-for", "")
+    return forwarded.split(",")[0].strip() or (request.client.host if request.client else "unknown")
+
+
 class URLRequest(BaseModel):
     url: str = Field(min_length=1, max_length=4096)
 
 
 def require_api_key(x_api_key: str | None = Header(default=None)):
+    if demo_mode():
+        return
+
     expected = os.environ.get("CYBER_GUARDIAN_API_KEY")
 
     if not expected:
@@ -55,24 +93,37 @@ _rate_lock = Lock()
 
 
 def enforce_rate_limit(
+    request: Request,
     x_api_key: str | None = Header(default=None),
 ):
-    # Authentication must succeed before this dependency runs.
-    expected = os.environ.get("CYBER_GUARDIAN_API_KEY")
+    import hashlib
 
-    if not expected or not x_api_key or not secrets.compare_digest(
-        x_api_key, expected
-    ):
-        raise HTTPException(
-            status_code=401,
-            detail="Authentication required.",
-        )
+    if demo_mode():
+        # No key in demo mode: limit each visitor by address, then check the shared budget.
+        identity = "demo:" + visitor_id(request)
+        if not spend_demo_budget():
+            raise HTTPException(
+                status_code=429,
+                detail="The demo has reached its limit for today. Please try again "
+                "tomorrow, or run it yourself from the GitHub repository.",
+            )
+    else:
+        # Authentication must succeed before this dependency runs.
+        expected = os.environ.get("CYBER_GUARDIAN_API_KEY")
+
+        if not expected or not x_api_key or not secrets.compare_digest(
+            x_api_key, expected
+        ):
+            raise HTTPException(
+                status_code=401,
+                detail="Authentication required.",
+            )
+        identity = x_api_key
 
     now = time.monotonic()
 
-    # Hash the credential so raw API keys are not stored in this dictionary.
-    import hashlib
-    key_id = hashlib.sha256(x_api_key.encode()).hexdigest()
+    # Hash the identity so raw API keys and addresses are not stored in this dictionary.
+    key_id = hashlib.sha256(identity.encode()).hexdigest()
 
     with _rate_lock:
         timestamps = _request_times.setdefault(key_id, deque())
@@ -97,6 +148,12 @@ def enforce_rate_limit(
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/api/v1/config")
+def public_config():
+    """Lets the page know whether to show the demo banner. Contains nothing secret."""
+    return {"demo": demo_mode(), "daily_limit": DEMO_DAILY_LIMIT}
 
 
 @app.post(
@@ -227,3 +284,9 @@ def analyze_email_endpoint(request: EmailRequest):
             "guarantee that an email is safe."
         ),
     }
+
+
+# Serve the built frontend last, so it never hides an API route (single-container deploy).
+_static_dir = os.environ.get("STATIC_DIR", "")
+if _static_dir and os.path.isdir(_static_dir):
+    app.mount("/", StaticFiles(directory=_static_dir, html=True), name="web")

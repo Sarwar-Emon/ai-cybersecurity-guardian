@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: ai-cybersecurity-guardian
+    runtime: docker
+    dockerfilePath: ./Dockerfile.render
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: DEMO_MODE
+        value: "true"
+      - key: DEMO_DAILY_REQUESTS
+        value: "500"

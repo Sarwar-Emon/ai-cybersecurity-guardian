@@ -1,0 +1,28 @@
+# Single container for a public demo: builds the React app, then serves it from FastAPI.
+FROM node:24-alpine AS web
+WORKDIR /web
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/index.html ./
+COPY frontend/tsconfig*.json ./
+COPY frontend/vite.config.ts ./
+COPY frontend/src/ ./src/
+COPY frontend/public/ ./public/
+RUN npm run build
+
+FROM python:3.13-slim
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    DEMO_MODE=true \
+    STATIC_DIR=/app/web
+WORKDIR /app
+COPY requirements.txt .
+RUN python -m pip install --no-cache-dir -r requirements.txt
+COPY api/ ./api/
+COPY src/ ./src/
+COPY models/ ./models/
+COPY --from=web /web/dist ./web
+RUN useradd --create-home appuser && chown -R appuser:appuser /app
+USER appuser
+# Render sets PORT. Fall back to 8000 for local runs.
+CMD ["sh", "-c", "uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
